@@ -9,7 +9,7 @@
 #ifndef __MY_NETWORK_H
 
 #define MY_SSID "Dartmoon"
-#define MY_PASS "Dartmoon2021!"           //Wifi
+#define MY_PASS "Dartmoon2021!"  //Wifi
 
 #endif
 
@@ -36,19 +36,19 @@ unsigned long lastConnectionTime = 0;
 const unsigned long postingInterval = 2L * 1000L;
 
 
-MCUFRIEND_kbv tft;                //Display
+MCUFRIEND_kbv tft;  //Display
 const int XP = 6, YP = A1, XM = A2, YM = 7;
 TouchScreen ts(XP, YP, XM, YM, 300);
 const int MINPRESSURE = 10, MAXPRESSURE = 1000;
 
-#define RST_PIN 5                 //RFID reader
+#define RST_PIN 5  //RFID reader
 #define SS_PIN 53
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
-int width, height;        //Width and height of the display
+int width, height;  //Width and height of the display
 
 #define BLACK 0x0000
-#define WHITE 0xFFFF        //Color
+#define WHITE 0xFFFF  //Color
 #define RED 0xF800
 #define GREEN 0x07E0
 #define BLUE 0x001F
@@ -122,8 +122,8 @@ Button menuButtonsUsers[] = {
 const int NUM_ADMIN_BUTTONS = sizeof(menuButtonsAdmin) / sizeof(menuButtonsAdmin[0]);
 const int NUM_USERS_BUTTONS = sizeof(menuButtonsUsers) / sizeof(menuButtonsUsers[0]);
 
-String names[] = { "Luca", "Marco", "Giulia", "Anna", "Francesco", "Roberta", "Giulio" };
-String surnames[] = { "Rossi", "Bianchi", "Verdi", "Neri", "Ferrari", "Gallo", "Esposito" };
+//String names[] = { "Luca", "Marco", "Giulia", "Anna", "Francesco", "Roberta", "Giulio" };
+//String surnames[] = { "Rossi", "Bianchi", "Verdi", "Neri", "Ferrari", "Gallo", "Esposito" };
 
 class User {
 private:
@@ -133,8 +133,9 @@ private:
 
 public:
   User() {
-    name = names[random(0, 7)];
-    surname = surnames[random(0, 7)];
+    //name = names[random(0, 7)];
+    //surname = surnames[random(0, 7)];
+    UID = "";
     isWorking = false;
     workedHours = 0;
   };
@@ -159,7 +160,7 @@ public:
       setTFT(10, height / 2, 2, BLACK, GREEN);
       tft.print("You're already in");
     }
-    delay(2000);
+    delay(1000);
   }
 
   void registerExit() {
@@ -172,7 +173,12 @@ public:
       setTFT(10, height / 2, 2, BLACK, RED);
       tft.print("You're already out\n");
     }
-    delay(2000);
+    delay(1000);
+  }
+
+  void setInfo(String name1, String surname1) {
+    name = name1;
+    surname = surname1;
   }
 
   bool isEmpty() {
@@ -202,10 +208,6 @@ public:
     return status;
   }*/
 
-  bool getIsWorking() {
-    return isWorking;
-  }
-
   String getTotalName() {
     return name + " " + surname;
   }
@@ -232,9 +234,6 @@ public:
   }
 };
 
-User Users[2];
-const int numUsers = sizeof(Users) / sizeof(Users[0]);
-
 
 void setup() {
   Serial.begin(9600);
@@ -243,7 +242,9 @@ void setup() {
   Fishino.reset();
   Fishino.setMode(STATION_MODE);
 
+  mfrc522.PCD_Reset();
   mfrc522.PCD_Init();
+
 
   tft.reset();
   uint16_t ID = tft.readID();
@@ -257,7 +258,6 @@ void setup() {
   tft.print("Initializing");
   while (!Fishino.begin(MY_SSID, MY_PASS)) {
     Serial.print(".");
-    tft.print(".");
   }
 #ifdef IPADDR
   Fishino.config(ip, gw, nm);
@@ -268,94 +268,55 @@ void setup() {
   while (Fishino.status() != STATION_GOT_IP) {
     delay(500);
     Serial << ".";
+    tft.print(".");
   }
   Serial.println();
 }
 
+
 bool ExitFromLoop;
 bool isAdminInitialized = false;
+int LoopCycles = 0;
+User Users[3];
+const int numUsers = sizeof(Users)/sizeof(Users[0]);
+
 
 void loop() {
   ExitFromLoop = false;
 
   String UID = "";
-  String adminUID = RequestAdminExistance();
 
   if (!isAdminInitialized) {  //Check only one time if there is an admin, if there isn't register a new admin
-    if (adminUID == "null" || adminUID == "false") {
-      setTFT(5, height / 2, 2);
-      tft.print("Admin not found");
-      delay(2000);
-      setTFT(10, height / 2, 2);
-      tft.print("Register the admin: ");
-      UID = readCard();
-      while (UID == "") {
-        UID = readCard();
-        delay(20);
-      }
-      registerAdmin(UID);
-      Users[0].setAdmin(UID);
-      setTFT(10, height / 2, 2, BLACK, GREEN);
-      tft.print("Admin\n Registered");
-      delay(2000);
-      isAdminInitialized = true;
-    } else {
-      Users[0].setAdmin(adminUID);
-      setTFT(5, height / 2, 2, BLACK, GREEN);
-      tft.println("Admin Found");
-      delay(2000);
-      isAdminInitialized = true;
-    }
+    initializeAdmin();
+    isAdminInitialized = true;
   }
 
-
-  setTFT(10, height / 2, 2);
-  tft.println("Scan a card");
+  if (LoopCycles == 0) {
+    setTFT(10, height / 2, 2);
+    tft.println("Scan a card");
+  }
   UID = readCard();
-
-  while (UID == "") {
-    delay(20);
-    UID = readCard();
-  }
-
-  for (int i = 1; i < numUsers; i++) {
-    if (Users[i].isEmpty()) {
-      if (getUserFromServer(UID) == Users[i].getTotalName()) {
-        Users[i].setUser(UID);
-      }
-    }
-  }
-
-  String oldUID = "";
-  int idx = findFromUID(UID);
-
-  if (idx == -1) {
-    setTFT(10, height / 2, 2, BLACK, RED);
-    tft.print("Unknown User!!!!");
-    delay(2000);
+  if (UID == "") {
+    LoopCycles++;
     return;
   }
 
-  User thisUser = Users[idx];
-  if (thisUser.getType() == "Admin") {
-    setTFT(0, height / 2, 3, BLACK, CYAN);
-    tft.print("WELCOME ADMIN");
-    delay(2000);
+  getSavedUsers(UID);
+  int idx = findFromUID(UID);
+  if (idx == -1) {
+    UserNotFound();
+    return;
   }
+  adminBoot(idx);
   ShowFunctions(UID);
-  oldUID = thisUser.getUID();
-  String newUID = "";
 
+  waitForTouch(idx);
+}
+
+
+void waitForTouch(int idx) {        //This function allow my application to wait for a click when the user interface is shown
+  LoopCycles = 0;
   while (!ExitFromLoop) {
-    if (newUID != "") {
-      if (newUID != oldUID) {
-        thisUser.set(newUID);
-        oldUID = newUID;
-        newUID = "";
-      }
-    }
-
-
     TSPoint p = ts.getPoint();
     pinMode(XM, OUTPUT);
     pinMode(YP, OUTPUT);
@@ -364,11 +325,10 @@ void loop() {
       int x = map(p.x, PORTRAIT_LEFT, PORTRAIT_RT, 0, width);
       int y = map(p.y, PORTRAIT_TOP, PORTRAIT_BOT, 0, height);
 
-      if (thisUser.getType() == "User") {
+      if (Users[idx].getType() == "User") {
         for (int i = 0; i < NUM_USERS_BUTTONS; i++) {
           if (x >= menuButtonsUsers[i].x && x <= menuButtonsUsers[i].x + menuButtonsUsers[i].w && y >= menuButtonsUsers[i].y && y <= menuButtonsUsers[i].y + menuButtonsUsers[i].h) {
             menuButtonsUsers[i].action(Users[idx].getUID());
-            newUID = Users[idx].getUID();
             return;
           }
         }
@@ -376,7 +336,6 @@ void loop() {
         for (int i = 0; i < NUM_ADMIN_BUTTONS; i++) {
           if (x >= menuButtonsAdmin[i].x && x <= menuButtonsAdmin[i].x + menuButtonsAdmin[i].w && y >= menuButtonsAdmin[i].y && y <= menuButtonsAdmin[i].y + menuButtonsAdmin[i].h) {
             menuButtonsAdmin[i].action(Users[0].getUID());
-            newUID = Users[0].getUID();
             return;
           }
         }
@@ -384,6 +343,54 @@ void loop() {
     }
   }
 }
+
+void getSavedUsers(String UID) {              //With this function, when a registered user on server scan his card, my application save him in an array
+  for (int i = 1; i < numUsers; i++) {
+    if (Users[i].isEmpty()) {
+      if (getUserFromServer(UID) == Users[i].getTotalName()) {
+        Users[i].setUser(UID);
+      }
+    }
+  }
+}
+
+void initializeAdmin() {                    //In this function my app initialize the admin, by find if he is already registered or not
+  String adminUID = RequestAdminExistance();
+  if (adminUID == "null" || adminUID == "false") {
+    setTFT(5, height / 2, 2);
+    tft.print("Admin not found");
+    delay(1000);
+    registerAdminOnApp();
+
+  } else {
+    AdminAlreadyExist(adminUID);
+  }
+  getUserList();
+}
+
+
+void registerAdminOnApp() {
+  setTFT(10, height / 2, 2);
+  tft.print("Register the admin: ");
+  String UID = readCard();
+  while (UID == "") {
+    UID = readCard();
+  }
+  registerAdmin(UID);
+  Users[0].setAdmin(UID);
+  setTFT(10, height / 2, 2, BLACK, GREEN);
+  tft.print("Admin\n Registered");
+  delay(1000);
+}
+
+
+void AdminAlreadyExist(String UID) {
+  Users[0].setAdmin(UID);
+  setTFT(5, height / 2, 2, BLACK, GREEN);
+  tft.println("Admin Found");
+  delay(1000);
+}
+
 
 int findUserFromNameSurname(String totalName) {  //An useful function to find an user from name + surname
   for (int i = 0; i < numUsers; i++) {
@@ -418,6 +425,7 @@ String readCard() {  //Read a new card with the RFID reader
   return newUID;
 }
 
+
 void doRegisterDevice(String totalName) {  //Register a new device. This function is called from a selected user to register
   int idx = findUserFromNameSurname(totalName);
 
@@ -428,14 +436,13 @@ void doRegisterDevice(String totalName) {  //Register a new device. This functio
 
   while (newUID == "") {
     newUID = readCard();
-    delay(20);
   }
 
   for (int i = 0; i < numUsers; i++) {
     if (newUID == Users[i].getUID()) {
       setTFT(10, height / 2, 2, BLACK, RED);
       tft.print("This UID is\n already taken");
-      delay(3000);
+      delay(1500);
       return;
     }
   }
@@ -443,8 +450,9 @@ void doRegisterDevice(String totalName) {  //Register a new device. This functio
   Users[idx].setUser(newUID);
   setTFT(10, height / 2, 2, BLACK, GREEN);
   tft.print("New User\n " + Users[idx].getName() + " " + Users[idx].getSurname() + "\n Registered");
-  delay(3000);
+  delay(1500);
 }
+
 
 void doRegisterEntry(String uid) {  //Register a new entry for the current user
   int idx = findFromUID(uid);
@@ -456,8 +464,25 @@ void doRegisterEntry(String uid) {  //Register a new entry for the current user
   RegisterEntryOnServer(uid);
 }
 
+
 void doExitAccount() {  //Exit from the interface
   ExitFromLoop = true;
+}
+
+
+void adminBoot(int idx) {               //The boot animation when the admin access
+  if (Users[idx].getType() == "Admin") {
+    setTFT(5, height / 2, 3, BLACK, CYAN);
+    tft.println("WELCOME ADMIN");
+    delay(1000);
+  }
+}
+
+
+void UserNotFound() {             //What to show if a user isn't found
+  setTFT(10, height / 2, 2, BLACK, RED);
+  tft.print("Unknown User!!!!");
+  delay(1000);
 }
 
 
@@ -483,23 +508,18 @@ void doTestCard(String uid) {  //Test if a card work
     cycles++;
   }
 
-  if (TestCardOnServer(uid)) {
+  if (uid != "") {
     setTFT(width, height / 2, 2, BLACK, GREEN);
     tft.print("Your card works");
   } else {
     setTFT(width, height / 2, 2, BLACK, RED);
     tft.print("Your card doesn't work");
   }
-  delay(2000);
+  delay(1000);
 }
 
-void doReplaceDevice(String UID) {  //Replace a registered device with a new one (This function doesn't work well)
+void doReplaceDevice(String UID) {  //Replace a registered device with a new one
   int idx = findFromUID(UID);
-  if (UID == -1) {
-    return;
-  }
-
-  User thisUser = Users[idx];
 
   setTFT(5, height / 2, 2);
   tft.print("Scan your new card");
@@ -508,33 +528,25 @@ void doReplaceDevice(String UID) {  //Replace a registered device with a new one
 
   while (newUID == "") {
     newUID = readCard();
-    delay(20);
   }
 
   for (int i = 0; i < numUsers; i++) {
+    if (i == idx) {
+      continue;
+    }
     if (newUID == Users[i].getUID()) {
       setTFT(10, height / 2, 2, BLACK, RED);
       tft.print("This UID is\n already taken");
-      delay(3000);
+      delay(1500);
       return;
     }
   }
 
-  if (newUID == thisUser.getUID()) {
-    setTFT(10, height / 2, 2, BLACK, RED);
-    tft.println("Same as the old");
-    delay(3000);
-    return;
-  }
-  if (thisUser.getType() == "Admin") {
-    Users[0].set(newUID);
-  } else {
-    Users[idx].set(newUID);
-    delay(3000);
-  }
+  registerUserOnServer(newUID, Users[idx].getName(), Users[idx].getSurname());
+  Users[idx].set(newUID);
   setTFT(10, height / 2, 2, BLACK, GREEN);
   tft.print("Card of " + Users[idx].getName() + " " + Users[idx].getSurname() + "\n Changed");
-  delay(3000);
+  delay(1500);
 }
 
 
@@ -552,7 +564,7 @@ void showUsersToReplace(String uid) {  //Shows a list of registered user to repl
     if (i == numUsers) {
       totalUsers[i].label = "Exit";
       totalUsers[i].borderColor = RED;
-      totalUsers[i].action = doExitSection;
+      totalUsers[i].action = NULL;
       tft.getTextBounds(totalUsers[i].label, 0, 0, &x1, &y1, &w, &h);
       totalUsers[i].w = w + 20;
       totalUsers[i].h = h + 10;
@@ -564,7 +576,7 @@ void showUsersToReplace(String uid) {  //Shows a list of registered user to repl
       tft.drawRect(totalUsers[i].x, totalUsers[i].y, totalUsers[i].w, totalUsers[i].h, totalUsers[i].borderColor);
       y += totalUsers[i].h + 15;
     } else {
-      if (Users[i].isEmpty()) {
+      if (Users[i].isEmpty() || Users[i].getUID() == uid) {
         continue;
       }
       totalUsers[i].borderColor = GREEN;
@@ -595,13 +607,12 @@ void showUsersToReplace(String uid) {  //Shows a list of registered user to repl
       for (int i = 0; i < numUsers + 1; i++) {
         if (i == numUsers) {
           if (x >= totalUsers[i].x && x <= totalUsers[i].x + totalUsers[i].w && y >= totalUsers[i].y && y <= totalUsers[i].y + totalUsers[i].h) {
-            totalUsers[i].action(Exit);
             Exit = "true";
             break;
           }
         }
         if (x >= totalUsers[i].x && x <= totalUsers[i].x + totalUsers[i].w && y >= totalUsers[i].y && y <= totalUsers[i].y + totalUsers[i].h) {
-          totalUsers[i].action(Users[i].getTotalName());
+          totalUsers[i].action(Users[i].getUID());
           Exit = "true";
           break;
         }
@@ -625,7 +636,7 @@ void showUsersToRegister(String uid) {  //Show a list of unregistered user to le
     if (i == numUsers) {
       totalUsers[i].label = "Exit";
       totalUsers[i].borderColor = RED;
-      totalUsers[i].action = doExitSection;
+      totalUsers[i].action = NULL;
       tft.getTextBounds(totalUsers[i].label, 0, 0, &x1, &y1, &w, &h);
       totalUsers[i].w = w + 20;
       totalUsers[i].h = h + 10;
@@ -668,7 +679,6 @@ void showUsersToRegister(String uid) {  //Show a list of unregistered user to le
       for (int i = 0; i < numUsers + 1; i++) {
         if (i == numUsers) {
           if (x >= totalUsers[i].x && x <= totalUsers[i].x + totalUsers[i].w && y >= totalUsers[i].y && y <= totalUsers[i].y + totalUsers[i].h) {
-            totalUsers[i].action(Exit);
             Exit = "true";
             break;
           }
@@ -681,10 +691,6 @@ void showUsersToRegister(String uid) {  //Show a list of unregistered user to le
       }
     }
   }
-}
-
-void doExitSection(String& Exit) {  //Exit from the user-choosing section
-  Exit = "true";
 }
 
 
@@ -752,8 +758,6 @@ String RequestAdminExistance() {  //This function checks if there is already a s
 
   if (client.connect(server, 8000)) {
     Serial.println("connecting...");
-
-
 
     client << F("GET /admin/exist HTTP/1.1\r\n");
     client << F("Host: 192.168.1.3\r\n");
@@ -922,7 +926,7 @@ bool isAdmin(String UID) {  //Check if a determinated UID is associated to the a
           StaticJsonDocument<256> doc;
           DeserializationError error = deserializeJson(doc, jsonMessage);
           if (!error) {
-            return doc["success"];
+            return doc["data"]["isAdmin"];
           }
         }
       }
@@ -981,6 +985,9 @@ void registerUserOnServer(String UID, String name, String surname) {  //Register
 
           StaticJsonDocument<256> doc;
           DeserializationError error = deserializeJson(doc, jsonMessage);
+          if (!error) {
+            return;
+          }
         }
       }
     }
@@ -1107,7 +1114,8 @@ void RegisterExitOnServer(String UID) {  //Register an exit on the server
             Serial.print("Errore nel parsing JSON: ");
             Serial.println(error.c_str());
             return;
-          }
+          } else
+            return;
         }
       }
     }
@@ -1117,7 +1125,7 @@ void RegisterExitOnServer(String UID) {  //Register an exit on the server
   return;
 }
 
-String getUserFromServer(String UID) {        //This function is used to find a reference of an user in the server
+String getUserFromServer(String UID) {  //This function is used to find a reference of an user in the server
   client.stop();
 
   if (client.connect(server, 8000)) {
@@ -1167,7 +1175,6 @@ String getUserFromServer(String UID) {        //This function is used to find a 
           StaticJsonDocument<256> doc;
           DeserializationError error = deserializeJson(doc, jsonMessage);
 
-
           if (!error) {
             if (doc["data"]["userToken"] == UID) {
               return doc["data"]["totalName"];
@@ -1187,15 +1194,15 @@ String getUserFromServer(String UID) {        //This function is used to find a 
   return "";
 }
 
-bool TestCardOnServer(String UID) {                     //Test if a card works
+
+void getUserList() {  //This function is used to get a list of the saved Users on the server
   client.stop();
 
   if (client.connect(server, 8000)) {
     Serial.println("connecting...");
 
 
-    String request = "GET /user/test?token=" + UID + " HTTP/1.1\r\n";
-    client << (request);
+    client << ("GET /user/list HTTP/1.1\r\n");
     client << F("Host: 192.168.1.3\r\n");
     client << F("User-Agent: ArduinoWiFi/1.1\r\n");
     client << F("Connection: close\r\n");
@@ -1216,7 +1223,6 @@ bool TestCardOnServer(String UID) {                     //Test if a card works
     while (client.available()) {
       char c = client.read();
 
-
       if (c == '{') {
         if (!jsonStarted) {
           jsonStarted = true;
@@ -1234,18 +1240,20 @@ bool TestCardOnServer(String UID) {                     //Test if a card works
         if (braceCount == 0 && jsonStarted) {
           jsonStarted = false;
 
-          StaticJsonDocument<256> doc;
+          DynamicJsonDocument doc(2048);
           DeserializationError error = deserializeJson(doc, jsonMessage);
 
-
           if (!error) {
-            return doc["success"];
+            for (int i = 0; i < numUsers; i++) {
+              String info = "User" + String(i + 1);
+              Users[i].setInfo(doc["data"][info]["userName"], doc["data"][info]["userSurname"]);
+            }
+            return;
           }
-
           if (error) {
             Serial.print("Errore nel parsing JSON: ");
             Serial.println(error.c_str());
-            return false;
+            return;
           }
         }
       }
@@ -1253,5 +1261,5 @@ bool TestCardOnServer(String UID) {                     //Test if a card works
   }
 
   Serial.println("Timeout lettura JSON");
-  return false;
+  return;
 }
