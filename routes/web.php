@@ -2,130 +2,136 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::get('/admin/exist', function () {
-    $token = cache()->get("token", false);
+Route::get('/admin/exist', function () {                                        //Check if there is an admin
+    $token = cache()->get('token', false);
 
     return response()->json([
-        "success" => true,
-        "data" => [
-            "token" => $token,
+        'success' => true,
+        'data' => [
+            'token' => $token,
         ],
-        "message" => ""
+        'message' => ''
     ]);
 });
 
 
-Route::get('/admin/register', function () {
-    $token = cache()->rememberForever("token", fn () => request()->input("token"));
+Route::get('/admin/register', function () {                                                 //Let an admin register
+    $token = cache()->rememberForever('token', fn () => request()->input('token'));
 
     return response()->json([
-        "success" => true,
-        "data" => [
-            "token" => $token,
+        'success' => true,
+        'data' => [
+            'token' => $token,
         ],
-        "message" => ""
+        'message' => ''
     ]);
 });
 
 
-Route::get('/user/token', function () {
-    $userToken = request()->input("token");
-    $adminToken = cache()->get("token", false);
-    $success = ($adminToken == $userToken);
+Route::get('/user/token', function () {                             //Check if a user is the admin
+    $userToken = request()->input('token');
+    $adminToken = cache()->get('token', false);
+    $isAdmin = ($userToken == $adminToken);
 
     return response()->json([
-        "success" => $success,
-        "data" => [
-            "token" => $userToken,  
+        'success' => true,
+        'data' => [
+            'isAdmin' => $isAdmin,
         ],
-        "message" => ""    
+        'message' => ''    
     ]);
 });
 
 
-Route::get('/user/register', function () {
-    $userToken = cache()->rememberForever("userToken", fn () => request()->input("userToken"));
-    $name = cache()->rememberForever("userName", fn () => request()->input("userName"));
-    $surname = cache()->rememberForever("userSurname", fn () => request()->input("userSurname"));
-
-    //Registrare nel database o una tabella da qualche parte
-    //Controllare doppioni
+Route::get('/user/register', function () {                                              //Register a User
+    
+    
+    $registeredUser = [
+        'token' => cache()->rememberForever('userToken', fn () => request()->input('userToken')),
+        'name' =>  cache()->rememberForever('userName', fn () => request()->input('userName')),
+        'surname' => cache()->rememberForever('userSurname', fn () => request()->input('userSurname'))
+    ];
 
     return response()->json([
-       "success" => true,
-       "data" => [
-            "userToken" => $userToken,
-            "userName" => $name,
-            "userSurname" => $surname,
+       'success' => true,
+       'data' => [
+            'userToken' => $registeredUser["token"],
+            'userName' => $registeredUser["name"],
+            'userSurname' => $registeredUser["surname"],
        ],
-        "message" => ""
+        'message' => ''
     ]);
 });
 
+Route::get('/user/list', function () {                                      //Give a list of non-registered Users
 
-Route::get('/user/checkin', function () {
-    $token = request()->input("token");
-    
-    //Registrare da qualche parte
     return response()->json([
-        "success" => true,
-        "data" => [
-            "token" => $token,
-            "status" => "working",  
-        ],
-        "message" => ""
+       'success' => true,
+       'data' => userlist(),
+        'message' => ''
     ]);
 });
 
 
-Route::get('/user/checkout', function () {
-    $token = request()->input("token");
-    
-
-    //Registrare da qualche parte
+Route::get('/user/checkin', function () {                           //Register an entry
+    $token = request()->input('token');
+   
     return response()->json([
-        "success" => true,
-        "data" => [
-            "token" => $token,
-            "status" => "not working",  
+        'success' => true,
+        'data' => [
+            'token' => $token,
+            'status' => 'working',  
         ],
-        "message" => ""
+        'message' => ''
     ]);
 });
 
-Route::get('/user/get', function () {
-    $currentToken = request()->input("token");
 
-    $adminToken = cache()->get("token", false);
-    $userToken = cache()->get("userToken", false);
+Route::get('/user/checkout', function () {                                              //Register an exit
+    $token = request()->input('token');
     
     return response()->json([
-        "success" => true,
-        "data" => [
-            "userToken" => $userToken,
-            "totalName" => cache()->get("userName", false) . " " . cache()->get("userSurname", false),
+        'success' => true,
+        'data' => [
+            'token' => $token,
+            'status' => 'not working',  
         ],
-        "message" => ""
+        'message' => ''
     ]);
 });
 
-Route::get('/user/test', function () {
-    $currentToken = request()->input("token");
 
-    $adminToken = cache()->get("token", false);
-    $userToken = cache()->get("userToken", false);
-
-    $isWorking = false;
-
-    if ($currentToken == $adminToken || $currentToken == $userToken) {
-        $isWorking = true;
-    }
-
+Route::get('/user/get', function () {                               //Get an user from the given token
+    $adminToken = cache()->get('token', false);
+    $userToken = cache()->get('userToken', false);
+    
     return response()->json([
-       "success" => $isWorking,
-       "data" => [
-            "token" => $currentToken,
-       ],
-       "message" => ""
+        'success' => true,
+        'data' => [
+            'userToken' => $userToken,
+            'totalName' => cache()->get('userName', false) . ' ' . cache()->get('userSurname', false),
+        ],
+        'message' => ''
     ]);
 });
+
+
+function userlist() {                                           //Show the list of users
+    return [
+        'User1' => [
+            'userName' => 'Luca',
+            'userSurname' => 'Rossi',
+            'userToken' => ''
+        ],
+        'User2' => [
+            'userName' => 'Piero',
+            'userSurname' => 'Verdi',
+            'userToken' => ''   
+        ],
+        'User3' => [
+            'userName' => 'Chiara',
+            'userSurname' => 'Bianchi',
+            'userToken' => ''  
+        ],
+    ]; 
+};
